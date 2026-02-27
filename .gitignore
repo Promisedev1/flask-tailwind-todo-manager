@@ -1,0 +1,59 @@
+-------------------------------------------------------------------
+
+General Python & Environment Files
+
+-------------------------------------------------------------------
+
+Python compiled files
+
+pycache/
+*.py[cod]
+*$py.class
+
+Installation and build artifacts
+
+build/
+develop-eggs/
+dist/
+wheels/
+*.egg-info/
+
+Virtual Environments & Environment Variables
+
+.venv/
+venv/
+env/
+.env
+.flaskenv
+
+-------------------------------------------------------------------
+
+Project-Specific (Flask & SQLAlchemy/SQLite)
+
+-------------------------------------------------------------------
+
+Flask instance folder (contains config, db files, secrets)
+
+This is the most critical item for your specific project.
+
+instance/
+*.db
+
+-------------------------------------------------------------------
+
+IDE & OS Temporary Files
+
+-------------------------------------------------------------------
+
+Common IDEs (VSCode, PyCharm/IntelliJ)
+
+.idea/
+.vscode/
+
+windows files
+
+Thumbs.db
+
+macOS files
+
+.DS_Store

@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>To-Do Manager</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Use Inter font -->
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap");
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: #f7f9fb;
+      }
+      .task-card {
+        transition: all 0.2s ease-in-out;
+        cursor: pointer;
+      }
+      .task-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+      }
+      .completed-task {
+        text-decoration: line-through;
+        color: #9ca3af;
+        background-color: #f3f4f6;
+      }
+      .hidden {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body class="p-4 md:p-8 min-h-screen">
+    <main class="max-w-4xl mx-auto bg-white shadow-xl rounded-xl p-6 md:p-10">
+      <h1 class="text-3xl font-bold text-gray-800 mb-6 border-b pb-4">
+        To-Do Manager
+      </h1>
+
+      <!-- Task Input Form -->
+      <form
+        id="add-task-form"
+        class="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-8"
+      >
+        <input
+          type="text"
+          id="task-input"
+          placeholder="What needs to be done?"
+          required
+          class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 shadow-sm"
+        />
+        <button
+          type="submit"
+          class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-150 ease-in-out w-full sm:w-auto"
+        >
+          Add Task
+        </button>
+      </form>
+
+      <!-- Task Lists Container -->
+      <div class="space-y-8">
+        <!-- Pending Tasks -->
+        <section>
+          <h2
+            class="text-2xl font-semibold text-gray-700 mb-4 border-l-4 border-yellow-500 pl-3"
+          >
+            Pending Tasks
+          </h2>
+          <!-- Placeholder moved outside the list container -->
+          <p id="pending-placeholder" class="text-gray-400 italic mb-4">
+            No pending tasks. Time to relax!
+          </p>
+          <div id="pending-tasks-list" class="space-y-3">
+            <!-- Pending tasks will be inserted here -->
+          </div>
+        </section>
+
+        <!-- Completed Tasks -->
+        <section>
+          <h2
+            class="text-2xl font-semibold text-gray-700 mb-4 border-l-4 border-green-500 pl-3"
+          >
+            Completed Tasks
+          </h2>
+          <!-- Placeholder moved outside the list container -->
+          <p id="completed-placeholder" class="text-gray-400 italic mb-4">
+            No completed tasks yet.
+          </p>
+          <div id="completed-tasks-list" class="space-y-3">
+            <!-- Completed tasks will be inserted here -->
+          </div>
+        </section>
+      </div>
+
+      <!-- Custom Modal for Confirmation/Alerts -->
+      <div
+        id="custom-modal"
+        class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden items-center justify-center z-50"
+      >
+        <div
+          class="bg-white p-6 rounded-lg shadow-2xl w-full max-w-sm transform transition-all duration-300 scale-95 opacity-0"
+          id="modal-content-container"
+        >
+          <h3
+            class="text-xl font-bold text-blue-600 mb-4"
+            id="modal-title"
+          ></h3>
+          <p class="text-gray-700 mb-6" id="modal-body"></p>
+          <div class="flex justify-end space-x-3">
+            <button
+              id="modal-cancel"
+              class="bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg hover:bg-gray-300 transition"
+            >
+              Cancel
+            </button>
+            <button
+              id="modal-confirm"
+              class="bg-blue-600 text-white font-medium py-2 px-4 rounded-lg hover:bg-blue-700 transition"
+            >
+              Confirm
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script type="module">
+      // --- LOCAL STATE AND CONSTANTS ---
+      let tasks = []; // Local array to hold the tasks after fetching from the backend
+
+      // --- FIX: Using window.location.origin ensures the URL is absolute and correctly parsed ---
+      const API_BASE_URL = window.location.origin + "/api/tasks";
+
+      // --- UI ELEMENTS ---
+      const taskInput = document.getElementById("task-input");
+      const addTaskForm = document.getElementById("add-task-form");
+      const pendingList = document.getElementById("pending-tasks-list");
+      const completedList = document.getElementById("completed-tasks-list");
+      const pendingPlaceholder = document.getElementById("pending-placeholder");
+      const completedPlaceholder = document.getElementById(
+        "completed-placeholder"
+      );
+
+      // --- BACKEND API (CRUD) FUNCTIONS using Fetch ---
+
+      /**
+       * Fetches all tasks from the Flask backend.
+       * @returns {Promise<Array>} The list of tasks.
+       */
+      async function fetchTasksFromBackend() {
+        try {
+          const response = await fetch(API_BASE_URL); // Uses the absolute URL
+          if (!response.ok) throw new Error("Network response was not ok");
+
+          tasks = await response.json();
+
+          tasks.sort((a, b) => a.id - b.id);
+
+          renderTasks();
+          console.log("Tasks fetched successfully.");
+        } catch (e) {
+          console.error("Error fetching tasks:", e);
+          showCustomModal(
+            "Connection Error",
+            `Failed to fetch tasks from the backend at ${API_BASE_URL}. Ensure your Flask server is running and the API endpoint is correct.`,
+            "error"
+          );
+        }
+      }
+
+      /**
+       * Adds a new task via a POST request to the Flask backend.
+       * @param {string} text - The task description.
+       */
+      async function addTask(text) {
+        try {
+          const response = await fetch(API_BASE_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: text.trim() }),
+          });
+
+          if (!response.ok) throw new Error("Failed to add task on server.");
+
+          await fetchTasksFromBackend();
+          taskInput.value = ""; // Clear input field
+          console.log("Task added successfully via POST.");
+        } catch (e) {
+          console.error("Error adding task:", e);
+          showCustomModal(
+            "Error",
+            "Failed to add the task via backend.",
+            "error"
+          );
+        }
+      }
+
+      /**
+       * Updates a task's status via a PATCH request.
+       * @param {number} taskId - The ID of the task to update.
+       * @param {boolean} currentStatus - The current completion status.
+       */
+      async function toggleTaskStatus(taskId, currentStatus) {
+        try {
+          const response = await fetch(`${API_BASE_URL}/${taskId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ completed: !currentStatus }),
+          });
+
+          if (!response.ok)
+            throw new Error("Failed to update task status on server.");
+
+          await fetchTasksFromBackend();
+          console.log(`Task ${taskId} status toggled.`);
+        } catch (e) {
+          console.error("Error updating task status:", e);
+          showCustomModal(
+            "Error",
+            "Failed to update task status via backend.",
+            "error"
+          );
+        }
+      }
+
+      /**
+       * Deletes a task via a DELETE request.
+       * @param {number} taskId - The ID of the task to delete.
+       */
+      async function deleteTask(taskId) {
+        try {
+          const response = await fetch(`${API_BASE_URL}/${taskId}`, {
+            method: "DELETE",
+          });
+
+          if (!response.ok) throw new Error("Failed to delete task on server.");
+
+          await fetchTasksFromBackend();
+          console.log(`Task ${taskId} deleted.`);
+        } catch (e) {
+          console.error("Error deleting task:", e);
+          showCustomModal(
+            "Error",
+            "Failed to delete task via backend.",
+            "error"
+          );
+        }
+      }
+
+      // --- UI RENDERING AND EVENT HANDLERS ---
+
+      function renderTasks() {
+        // Clear the actual task lists (no longer clears the placeholders)
+        pendingList.innerHTML = "";
+        completedList.innerHTML = "";
+
+        const taskArray = Array.isArray(tasks) ? tasks : [];
+
+        const pending = taskArray.filter((t) => !t.completed);
+        const completed = taskArray.filter((t) => t.completed);
+
+        // Toggle visibility of the placeholders based on whether the lists are empty.
+        // If length is 0, condition is false, 'hidden' class is removed (visible).
+        pendingPlaceholder.classList.toggle("hidden", pending.length > 0);
+        completedPlaceholder.classList.toggle("hidden", completed.length > 0);
+
+        pending.forEach((task) =>
+          pendingList.appendChild(createTaskElement(task))
+        );
+        completed.forEach((task) =>
+          completedList.appendChild(createTaskElement(task))
+        );
+      }
+
+      function createTaskElement(task) {
+        const li = document.createElement("li");
+        li.id = `task-${task.id}`;
+        li.className = `task-card flex items-center justify-between p-4 rounded-xl shadow-sm ${
+          task.completed ? "completed-task" : "bg-gray-50 hover:bg-gray-100"
+        }`;
+
+        const textContainer = document.createElement("div");
+        textContainer.className = "flex-grow mr-4";
+        textContainer.textContent = task.text;
+
+        const actions = document.createElement("div");
+        actions.className = "flex items-center space-x-2";
+
+        const toggleButton = document.createElement("button");
+        toggleButton.className = `p-2 rounded-full transition duration-150 ease-in-out ${
+          task.completed
+            ? "bg-yellow-500 hover:bg-yellow-600 text-white"
+            : "bg-green-500 hover:bg-green-600 text-white"
+        }`;
+
+        // --- ICON LOGIC (Left Arrow for Revert/Undo) ---
+        toggleButton.innerHTML = task.completed
+          ? // Left Arrow (Undo/Back to Pending)
+            '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>'
+          : // Checkmark Icon (Mark as Complete)
+            '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>';
+
+        toggleButton.onclick = () => toggleTaskStatus(task.id, task.completed);
+
+        const deleteButton = document.createElement("button");
+        deleteButton.className =
+          "p-2 rounded-full bg-red-500 hover:bg-red-600 text-white transition duration-150 ease-in-out";
+        deleteButton.innerHTML =
+          '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>';
+
+        deleteButton.onclick = (e) => {
+          e.stopPropagation();
+          showCustomModal(
+            "Delete Task",
+            `Are you sure you want to permanently delete the task: "${task.text}"?`,
+            "confirm",
+            () => deleteTask(task.id)
+          );
+        };
+
+        actions.appendChild(toggleButton);
+        actions.appendChild(deleteButton);
+
+        li.appendChild(textContainer);
+        li.appendChild(actions);
+
+        return li;
+      }
+
+      // --- FORM SUBMISSION HANDLER (FIX: Ensure preventDefault runs) ---
+
+      addTaskForm.addEventListener("submit", function (e) {
+        e.preventDefault(); // CRUCIAL: Stops the browser from reloading the page
+        const text = taskInput.value.trim();
+        if (text) {
+          addTask(text);
+        }
+      });
+
+      // --- CUSTOM MODAL IMPLEMENTATION ---
+
+      const modal = document.getElementById("custom-modal");
+      const modalContainer = document.getElementById("modal-content-container");
+      const modalTitle = document.getElementById("modal-title");
+      const modalBody = document.getElementById("modal-body");
+      const modalConfirm = document.getElementById("modal-confirm");
+      const modalCancel = document.getElementById("modal-cancel");
+
+      function showCustomModal(
+        title,
+        body,
+        type = "alert",
+        confirmAction = null
+      ) {
+        modalTitle.textContent = title;
+        modalBody.textContent = body;
+
+        modalConfirm.classList.remove("bg-red-600", "hover:bg-red-700");
+        modalConfirm.classList.add("bg-blue-600", "hover:bg-blue-700");
+        modalConfirm.textContent = "Confirm";
+
+        if (type === "confirm") {
+          modalConfirm.classList.remove("hidden");
+          modalCancel.classList.remove("hidden");
+          modalTitle.classList.remove("text-red-600");
+          modalTitle.classList.add("text-blue-600");
+
+          modalConfirm.classList.remove("bg-blue-600", "hover:bg-blue-700");
+          modalConfirm.classList.add("bg-red-600", "hover:bg-red-700");
+          modalConfirm.textContent = "Delete";
+
+          modalConfirm.onclick = null;
+          modalCancel.onclick = null;
+
+          modalConfirm.onclick = () => {
+            if (confirmAction) confirmAction();
+            hideCustomModal();
+          };
+          modalCancel.onclick = hideCustomModal;
+        } else {
+          modalConfirm.classList.remove("hidden");
+          modalCancel.classList.add("hidden");
+          modalConfirm.textContent = "Close";
+          modalConfirm.onclick = hideCustomModal;
+
+          if (type === "error") {
+            modalTitle.classList.remove("text-blue-600");
+            modalTitle.classList.add("text-red-600");
+          } else {
+            modalTitle.classList.remove("text-red-600");
+            modalTitle.classList.add("text-blue-600");
+          }
+        }
+
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+        setTimeout(() => {
+          modalContainer.classList.remove("scale-95", "opacity-0");
+          modalContainer.classList.add("scale-100", "opacity-100");
+        }, 10);
+      }
+
+      function hideCustomModal() {
+        modalContainer.classList.remove("scale-100", "opacity-100");
+        modalContainer.classList.add("scale-95", "opacity-0");
+        setTimeout(() => {
+          modal.classList.add("hidden");
+          modal.classList.remove("flex");
+        }, 300);
+      }
+
+      // --- INITIALIZATION ---
+      window.onload = fetchTasksFromBackend;
+    </script>
+  </body>
+</html>
